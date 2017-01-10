@@ -1,65 +1,56 @@
-library(compcodeR)
-library(methods)
+simulate_dataset = function(n_replicates, n_simulations, n_genes=10000, n_covariates=1, cov_strength_min=0,
+	cov_strength_max=2, cov_width_min=0, cov_width_max=1, min_counts=0, n_degs=3000, deg_min_fc=2, depth=3e+07){
 
-### set options ### ### ###
+	require(compcodeR)
+	require(methods)
 
-n_genes = 10000
-batch_strength_min = 0
-batch_strength_max = 2
-batch_width_min = 0
-batch_width_max = 1
-n_replicates = 3
-min_counts_gene = 0
-n_degs = 1000
-deg_min_fc = 1.5
-depth = 1e+07
+# apply covariate function
+	apply_covariate = function(counts, covariates, n_sim, n_samples, n_genes, min_counts){
 
-### batch simulation function ### ### ###
-batch_simulation = function(dat, strength_min=0, strength_max=2, width_min=0, width_max=1, min_counts_gene=0){
-	counts = dat@count.matrix
-	n_replicates = length(counts[1,]) / 2
-	n_genes = length(counts[,1])
-	
-	for (i in seq(n_replicates)){
-		batch_strength = runif(1, strength_min, strength_max)
-		n_batch_genes = round(runif(1, width_min, width_max) * n_genes)
-		batch_genes = sample(seq(n_genes))[1:n_batch_genes]
-		batch_effect = rep(1,n_genes)
-		batch_effect[batch_genes] = abs(rnorm(n_batch_genes, sd=batch_strength)) + 1
-		half_batch_genes = batch_genes[1:round(n_batch_genes / 2)]
-		batch_effect[half_batch_genes] = 1 / batch_effect[half_batch_genes]
-		dat@count.matrix[,i] = round(dat@count.matrix[,i]*batch_effect)
-		dat@count.matrix[,n_replicates+i] = round(dat@count.matrix[,n_replicates+i]*batch_effect)
+		for (n_cov in seq(length(covariates))){
+			cov_strength = covariates[[n_sim]][, paste0("cov_strength", n_cov)]
+			n_cov_genes = round(covariates[[n_sim]][, paste0("cov_width", n_cov)] * n_genes)
+
+			for (n_rep in seq(n_samples)){
+				cov_genes = sample(seq(n_genes))[seq(0, n_cov_genes[n_rep])]
+				cov_effect = pmax(rnorm(n_cov_genes[n_rep], sd=cov_strength[n_rep]), -1)
+				cov_var = round(counts[cov_genes, n_rep] * cov_effect)
+				counts[cov_genes, n_rep] = counts[cov_genes, n_rep] + cov_var
+			}
+		}
+		counts = counts[which(rowSums(counts)>=(min_counts)),]
+		return(counts)
 	}
 
-	dat@count.matrix = dat@count.matrix[which(rowSums(dat@count.matrix)>=(min_counts_gene)),]
-	return(dat)
-}
 
+### simulate datasets ###
 
-### simulate! ### ### ###
+	covariates = list()
+	n_samples = n_replicates*2
+	for (n_sim in seq(n_simulations)){
 
-for(k in seq(2)){
+	# generate data with no bias
+		dat = generateSyntheticData(dataset="simulated",
+			n.vars=n_genes,
+			samples.per.cond=n_replicates,
+			seqdepth=depth,
+			n.diffexp=n_degs,
+			fraction.upregulated=0.5,
+			between.group.diffdisp=F,
+			effect.size=deg_min_fc,
+			repl.id=1,
+			filter.threshold.total=min_counts)
 
-# generate data
-	dat = generateSyntheticData(dataset="simulated",
-		n.vars=n_genes,
-		samples.per.cond=n_replicates,
-		seqdepth=depth,
-		n.diffexp=n_degs,
-		fraction.upregulated=0.5,
-		between.group.diffdisp=F,
-		effect.size=deg_min_fc,
-		repl.id=1,
-		filter.threshold.total=min_counts_gene)
-	write.table(dat@count.matrix, file=paste0("counts",k), col.names=FALSE, quote=FALSE)
-
-# simulate batch
-	dat_batch = batch_simulation(dat,
-		strength_min=batch_strength_min,
-		strength_max=batch_strength_max,
-		width_min=batch_width_min,
-		width_max=batch_width_max,
-		min_counts_gene=min_counts_gene)
-	write.table(dat_batch@count.matrix, file=paste0("counts", k), col.names=FALSE, quote=FALSE)
+		# apply random covariates properties
+		covariates[[n_sim]] = data.frame(row.names=seq(n_samples))
+		for (n_cov in seq(n_covariates)){
+			#covariates[[n_sim]][, paste0("cov_strength", n_cov)] = runif(n_samples, cov_strength_min, cov_strength_max)
+			covariates[[n_sim]][, "cov_strength1"] = c(0,0,1,0,0,1)
+			#covariates[[n_sim]][, paste0("cov_width", n_cov)] = runif(n_samples, cov_width_min, cov_width_max)
+			covariates[[n_sim]][, "cov_width1"] = c(0,0,1,0,0,1)
+		}
+		cov_counts = apply_covariate(dat@count.matrix, covariates, n_sim, n_samples, n_genes, min_counts)
+		write.table(cov_counts, file=paste0("counts", n_sim), col.names=F, quote=F)
+	}
+	return(covariates)
 }
