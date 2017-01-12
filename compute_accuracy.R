@@ -1,4 +1,4 @@
-estimate_sv = function(n_simulations, n_replicates=3, n_DEGs=1000, n_top=1000, n_sv=0){ 
+estimate_sv = function(n_simulations, n_replicates=3, n_DEGs=3000, n_top=1000, n_sv=0){ 
 
 	require(limma)
 	require(edgeR)
@@ -18,18 +18,27 @@ estimate_sv = function(n_simulations, n_replicates=3, n_DEGs=1000, n_top=1000, n
 	}
 
 # AUC computation function
-	aucc = function(res, n_DEGs, n_top){
+	aucc = function(res, n_DEGs){
 		res$gene_n = as.numeric(gsub("g", "", row.names(res)))
+		n_top = length(res[,1])
+		top_pos = min(n_DEGs, n_top)
 		tpr=0; auc=0; fp=0
-		for(n in seq(length(res[,1]))){
+		for(n in seq(n_top)){
 			if(res$gene_n[n] < n_DEGs){
-				tpr = tpr + 1 / n_DEGs
-			}else{
-				auc=auc+tpr; fp=fp+1
+				tpr = tpr + 1 / top_pos
+				next
 			}
+			auc=auc+tpr; fp=fp+1
 		}
 		auc=auc+tpr; fp=fp+1
 		return(auc / fp)
+	}
+
+# true positive percentage function
+	tpr = function(res, n_DEGs){
+		res$gene_n = as.numeric(gsub("g", "", row.names(res)))
+		tp = sum(res$gene_n <= n_DEGs)
+		return(tp / length(res$gene_n))
 	}
 
 # sva correction function (based on counts)
@@ -57,7 +66,6 @@ estimate_sv = function(n_simulations, n_replicates=3, n_DEGs=1000, n_top=1000, n
 
 
 ### run sva estimation ###
-
 	svs = list()
 	group = rep(c("A","B"), each=n_replicates)
 	for (n_simul in seq(n_simulations)){
