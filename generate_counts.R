@@ -1,10 +1,10 @@
 simulate_dataset = function(n_replicates, n_simulations, n_genes=10000, n_degs=3000, deg_min_fc=1.5,  n_covariates=1, 
 			cov_strength_min=0, cov_strength_max=1, cov_width_min=0, cov_width_max=1, cov_decreasing_factor=0.8,
-			min_counts=0, data_file=NA, data_contrast=NA, depth=3e+07, relmeans="auto", dispersions="auto"){
+			min_counts=0, data_file=NA, depth=3e+07, relmeans="auto", dispersions="auto"){
 
-	require(compcodeR)
 	require(methods)
 	require(DESeq2)
+	source("compcodeR_mod.R")
 
 # apply covariate function
 	apply_covariate = function(counts, covariates, n_sim, n_samples, n_genes, min_counts){
@@ -28,13 +28,11 @@ simulate_dataset = function(n_replicates, n_simulations, n_genes=10000, n_degs=3
 ### simulate datasets ###
 
 # take depth relmeans and dispersions from a data_file, if specified
-	if (is.na(data_contrast)){
-		data_contrast = rep(c("A","B"), each=n_replicates)
-	}
 	if (!is.na(data_file)){
 		counts_data = read.table(data_file, row.names = 1)
 		counts_data = counts_data[which(rowSums(counts_data) > min_counts), ]
 		n_genes = length(counts_data[,1])
+		data_contrast = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
 		col_data = data.frame(contrast = data_contrast)
 		dds = DESeqDataSetFromMatrix(countData = counts_data, colData = col_data, design = ~contrast)
 		dds = estimateSizeFactors(dds)
@@ -44,7 +42,7 @@ simulate_dataset = function(n_replicates, n_simulations, n_genes=10000, n_degs=3
 		dispersions = mcols(dds)$dispGeneEst
 	}
 
-	n_samples = n_replicates*2
+	n_samples = sum(n_replicates)
 	covariates = list()
 	cov_correction = 1
 	for (n_sim in seq(n_simulations)){
