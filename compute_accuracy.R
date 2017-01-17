@@ -1,4 +1,4 @@
-estimate_sv = function(n_simulations, n_replicates=c(3,3), n_DEGs=3000, n_top=1000, n_sv=0){ 
+estimate_sv = function(n_simulations, n_replicates=3, n_DEGs=3000, n_top=1000, n_sv=0){ 
 
 	require(limma)
 	require(edgeR)
@@ -67,6 +67,9 @@ estimate_sv = function(n_simulations, n_replicates=c(3,3), n_DEGs=3000, n_top=10
 
 ### run sva estimation ###
 	svs = list()
+	if (length(n_replicates) == 1) {
+		n_replicates = rep(n_replicates, 2)
+	}   
 	group = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
 	for (n_simul in seq(n_simulations)){
 		counts_file = paste0("counts", n_simul) 

@@ -17,11 +17,17 @@ generateSyntheticData = function (dataset, n.vars, samples.per.cond, n.diffexp, 
     }
     uID <- paste(sample(c(0:9, letters, LETTERS), 10, replace = TRUE), 
         collapse = "")
+
+########## modified part ##########
+
 	if (length(samples.per.cond) == 1) {
 		samples.per.cond = rep(samples.per.cond, 2)
 	}
 	condition <- c(rep(1, samples.per.cond[1]), rep(2, samples.per.cond[2]))
 	n.samples <- sum(samples.per.cond)
+
+##########   #########   ##########
+
     S1 <- which(condition == 1)
     S2 <- which(condition == 2)
     if (length(effect.size) == 1) {

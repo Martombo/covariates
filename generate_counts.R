@@ -1,24 +1,20 @@
-simulate_dataset = function(n_replicates, n_simulations, n_genes=10000, n_degs=3000, deg_min_fc=1.5,  n_covariates=1, 
-			cov_strength_min=0, cov_strength_max=1, cov_width_min=0, cov_width_max=1, cov_decreasing_factor=0.8,
+simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_degs=3000, deg_min_fc=1.5,  n_covariates=1, 
+			cov_strength_min=0, cov_strength_max=1, cov_strengths=NA, cov_width=0.2, cov_decreasing_factor=0.8,
 			min_counts=0, data_file=NA, depth=3e+07, relmeans="auto", dispersions="auto"){
 
 	require(methods)
 	require(DESeq2)
-	source("compcodeR_mod.R")
+	if(!exists("generateSyntheticData")){
+		source("modified_compcode.R")
+	}
 
 # apply covariate function
-	apply_covariate = function(counts, covariates, n_sim, n_samples, n_genes, min_counts){
-
-		for (n_cov in seq(length(covariates))){
-			cov_strength = covariates[[n_sim]][, paste0("cov_strength", n_cov)]
-			n_cov_genes = round(covariates[[n_sim]][, paste0("cov_width", n_cov)] * n_genes)
-
-			for (n_rep in seq(n_samples)){
-				cov_genes = sample(seq(n_genes))[seq(0, n_cov_genes[n_rep])]
-				cov_effect = pmax(rnorm(n_cov_genes[n_rep], sd=cov_strength[n_rep]), -1)
-				cov_var = round(counts[cov_genes, n_rep] * cov_effect)
-				counts[cov_genes, n_rep] = counts[cov_genes, n_rep] + cov_var
-			}
+	apply_covariate = function(counts, cov_strength, cov_genes, n_samples, min_counts){
+		cov_effect = rnorm(length(cov_genes), sd=1)
+		for (n_sample in seq(n_samples)){
+			cov_effect_sample = 2^(cov_effect * cov_strength[n_sample])
+			cov_var = round(counts[cov_genes, n_sample] * cov_effect)
+			counts[cov_genes, n_sample] = counts[cov_genes, n_sample] + cov_var
 		}
 		counts = counts[which(rowSums(counts)>=(min_counts)),]
 		return(counts)
@@ -43,7 +39,7 @@ simulate_dataset = function(n_replicates, n_simulations, n_genes=10000, n_degs=3
 	}
 
 	n_samples = sum(n_replicates)
-	covariates = list()
+	strength_list = list()
 	cov_correction = 1
 	for (n_sim in seq(n_simulations)){
 
@@ -60,16 +56,21 @@ simulate_dataset = function(n_replicates, n_simulations, n_genes=10000, n_degs=3
 			filter.threshold.total=min_counts,
 			relmeans=relmeans,
 			dispersions=dispersions)
+		counts = dat@count.matrix
 
-	# apply random covariates properties
-		covariates[[n_sim]] = data.frame(row.names=seq(n_samples))
+	# apply covariates, random if not defined
+		strength_list[[n_sim]] = data.frame(row.names=seq(n_samples))
 		for (n_cov in seq(n_covariates)){
-			covariates[[n_sim]][, paste0("cov_strength", n_cov)] = runif(n_samples, cov_strength_min, cov_strength_max) * cov_correction
-			covariates[[n_sim]][, paste0("cov_width", n_cov)] = runif(n_samples, cov_width_min, cov_width_max) * cov_correction
+			if (!is.na(cov_strengths[1])){
+				strength_list[[n_sim]][, n_cov] = cov_strengths * cov_correction
+			}else{
+				strength_list[[n_sim]][, n_cov] = runif(n_samples, cov_strength_min, cov_strength_max) * cov_correction
+			}
+			cov_genes = sample(seq(n_genes))[1:(cov_width * n_genes)]
 			cov_correction = cov_correction * cov_decreasing_factor
+			#counts = apply_covariate(counts, strength_list[[n_sim]][, n_cov], cov_genes, n_samples, min_counts)
 		}
-		cov_counts = apply_covariate(dat@count.matrix, covariates, n_sim, n_samples, n_genes, min_counts)
-		write.table(cov_counts, file=paste0("counts", n_sim), col.names=F, quote=F)
+		write.table(counts, file=paste0("counts", n_sim), col.names=F, quote=F)
 	}
-	return(covariates)
+	return(strength_list)
 }
