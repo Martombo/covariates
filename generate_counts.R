@@ -1,5 +1,5 @@
 simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_degs=3000, deg_min_fc=1.5,  n_covariates=1, 
-			cov_strength_min=0, cov_strength_max=1, cov_strengths=NA, cov_width=0.2, cov_decreasing_factor=0.8,
+			cov_strength_min=0, cov_strength_max=0, cov_strengths=NA, cov_width=0.2, cov_decreasing_factor=0.8,
 			min_counts=0, data_file=NA, depth=3e+07, relmeans="auto", dispersions="auto"){
 
 	require(methods)
@@ -13,7 +13,7 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_de
 		cov_effect = rnorm(length(cov_genes), sd=1)
 		for (n_sample in seq(n_samples)){
 			cov_effect_sample = 2^(cov_effect * cov_strength[n_sample])
-			cov_var = round(counts[cov_genes, n_sample] * cov_effect)
+			cov_var = round(counts[cov_genes, n_sample] * cov_effect_sample)
 			counts[cov_genes, n_sample] = counts[cov_genes, n_sample] + cov_var
 		}
 		counts = counts[which(rowSums(counts)>=(min_counts)),]
@@ -68,7 +68,7 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_de
 			}
 			cov_genes = sample(seq(n_genes))[1:(cov_width * n_genes)]
 			cov_correction = cov_correction * cov_decreasing_factor
-			#counts = apply_covariate(counts, strength_list[[n_sim]][, n_cov], cov_genes, n_samples, min_counts)
+			counts = apply_covariate(counts, strength_list[[n_sim]][, n_cov], cov_genes, n_samples, min_counts)
 		}
 		write.table(counts, file=paste0("counts", n_sim), col.names=F, quote=F)
 	}
