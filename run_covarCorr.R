@@ -10,7 +10,7 @@ svs = estimate_sv(n_simulations, n_sv=1)
 
 print(cbind(svs[[1]]$sv, covariates[[1]]$cov_strength1))
 
-counts = read.table("counts1", row.names = 1)
+counts = read.table("counts1")
 colData = data.frame(contrast = c(rep("A", n_replicates[1]), rep("B", n_replicates[2])))
 dds = DESeqDataSetFromMatrix(countData = counts, colData = colData, design = ~contrast)
 

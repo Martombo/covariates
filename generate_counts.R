@@ -25,7 +25,7 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_de
 
 # take depth relmeans and dispersions from a data_file, if specified
 	if (!is.na(data_file)){
-		counts_data = read.table(data_file, row.names = 1)
+		counts_data = read.table(data_file)
 		counts_data = counts_data[which(rowSums(counts_data) > min_counts), ]
 		n_genes = length(counts_data[,1])
 		data_contrast = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
@@ -57,6 +57,7 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_de
 			relmeans=relmeans,
 			dispersions=dispersions)
 		counts = dat@count.matrix
+		true_log2FCs = dat@variable.annotations$truelog2foldchanges
 
 	# apply covariates, random if not defined
 		strength_list[[n_sim]] = data.frame(row.names=seq(n_samples))
@@ -70,7 +71,8 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_de
 			cov_correction = cov_correction * cov_decreasing_factor
 			counts = apply_covariate(counts, strength_list[[n_sim]][, n_cov], cov_genes, n_samples, min_counts)
 		}
-		write.table(counts, file=paste0("counts", n_sim), col.names=F, quote=F)
+		write.table(counts, paste0("counts", n_sim), row.names=F, col.names=F, quote=F)
+		write.table(true_log2FCs, paste0("log2FCs", n_sim), row.names=F, col.names=F, quote=F)
 	}
 	return(strength_list)
 }
