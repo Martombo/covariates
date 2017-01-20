@@ -1,6 +1,6 @@
-simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_degs=3000, deg_min_fc=1.5,  n_covariates=1, 
+simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=12500, n_degs=250, deg_min_fc=1.5,  n_covariates=1, 
 			cov_strength_min=0, cov_strength_max=0, cov_strengths=NA, cov_width=0.2, cov_decreasing_factor=0.8,
-			min_counts=0, data_file=NA, depth=3e+07, relmeans="auto", dispersions="auto"){
+			min_counts=0, data_file=NA, depth=1e+07, relmeans="auto", dispersions="auto"){
 
 	require(methods)
 	require(DESeq2)
