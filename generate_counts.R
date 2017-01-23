@@ -1,6 +1,6 @@
-simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=12500, n_degs=250, deg_min_fc=1.5,  n_covariates=1, 
-			cov_strength_min=0, cov_strength_max=0, cov_strengths=NA, cov_width=0.2, cov_decreasing_factor=0.8,
-			min_counts=0, data_file=NA, depth=1e+07, relmeans="auto", dispersions="auto"){
+simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_degs=2000, deg_min_fc=1.3,  n_covariates=1, 
+			cov_strength_min=0, cov_strength_max=0, cov_strengths=NA, cov_width=0.2, cov_decreasing_factor=1,
+			min_counts=0, data_file=NA, depth=3e+07, relmeans="auto", dispersions="auto"){
 
 	require(methods)
 	require(DESeq2)
@@ -40,7 +40,6 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=12500, n_de
 
 	n_samples = sum(n_replicates)
 	strength_list = list()
-	cov_correction = 1
 	for (n_sim in seq(n_simulations)){
 
 	# generate data with no bias
@@ -60,6 +59,7 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=12500, n_de
 		true_log2FCs = dat@variable.annotations$truelog2foldchanges
 
 	# apply covariates, random if not defined
+		cov_correction = 1
 		strength_list[[n_sim]] = data.frame(row.names=seq(n_samples))
 		for (n_cov in seq(n_covariates)){
 			if (!is.na(cov_strengths[1])){
