@@ -1,11 +1,7 @@
-require(limma)
-require(edgeR)
-require(DESeq2)
-require(sva)
-
-
 # voom DEA function
 voom_res = function(counts, group, design, n_top=100000){
+	require(limma)
+	require(edgeR)
 	dge = DGEList(counts=counts, group=group)
 	dge = calcNormFactors(dge)
 	v = voom(dge, design)
@@ -33,9 +29,27 @@ auc = function(res, fpr_limit=0.1){
 	return(auc)
 }
 
+# RUVseq empirical control genes
+ruv_corr_g = function(counts, group, n_sv=0){
+	require(RUVSeq)
+	require(DESeq2)
+	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), ~group)
+	dds = DESeq(dds)
+	res = as.data.frame(results(dds))
+	res = res[order(res$padj),]
+	gene_limit = round(dim(res)[1] * 0.2)
+	control_genes = row.names(res)[gene_limit:dim(res)[1]]
+	counts = as.matrix(counts)
+	row.names(counts) = seq(dim(counts)[1])
+	set = RUVg(counts, control_genes, k=1)
+	return(set[[1]])
+}
+
 # sva correction function (based on counts)
 sva_corr = function(counts, group, n_sv=0){
-	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), design)
+	require(sva)
+	require(DESeq2)
+	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), ~group)
 	dds = estimateSizeFactors(dds)
 	dat = counts(dds, normalized=T)
 	dat = dat[rowMeans(dat)>0,]
@@ -46,24 +60,31 @@ sva_corr = function(counts, group, n_sv=0){
 }
 
 # sva correction function (based on DESeq2 rld)
-sva_corr_rld = function(counts, group){
-	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), design)
+sva_corr_rld = function(counts, group, n_sv=0){
+	require(sva)
+	require(DESeq2)
+	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), ~group)
 	dds = estimateSizeFactors(dds)
-	dat = rlogTransformation(dds)
+	rld = rlogTransformation(dds)
+	dat = rld@assays[[1]]
+	dat[dat<0] = 0
 	mod = model.matrix(~group, colData(dds))
 	mod0 = model.matrix(~1, colData(dds))
-	svseq = svaseq(dat, mod, mod0)
+	svseq = svaseq(dat, mod, mod0, n.sv=n_sv)
 	return(svseq)
 }
 
 ### function to run the differential expression analysis on one dataset
 	# includes the computation of true and false positive rates
-perform_dea = function(n_sim, group, corr=0, n_sv=NA){
+perform_dea = function(n_sim, group, corr=0, n_sv=NA, ruv=NA){
 	counts = read.table(paste0("counts", n_sim))
 	design = model.matrix(~group)
 	if (!is.na(n_sv)){
-		svs = sva_corr(counts, group, n_sv)
+		svs = sva_corr_rld(counts, group, n_sv)
 		corr = svs$sv
+	}
+	if (!is.na(ruv) && ruv == "g"){
+		corr = ruv_corr_g(counts, group, n_sv)
 	}
 	if (length(corr) > 1){
 		design = model.matrix(~as.double(corr)+group)
@@ -79,14 +100,17 @@ perform_dea = function(n_sim, group, corr=0, n_sv=NA){
 }
 
 ### AUC computation on list of simulated datasets ###
-compute_accuracy = function(n_simulations, n_replicates, corr=0, n_sv=NA){
+compute_accuracy = function(n_simulations, n_replicates, corr=0, n_sv=NA, ruv=NA){
+	if (!is.na(n_sv) && !is.na(ruv)){
+		stop("choose either sva or ruv correction")	
+	}
 	if (length(n_replicates) == 1) {
 		n_replicates = rep(n_replicates, 2)
 	}
 	group = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
 	aucs = c()
 	for (n_sim in seq(n_simulations)){
-		results = perform_dea(n_sim, group, corr, n_sv)
+		results = perform_dea(n_sim, group, corr, n_sv, ruv)
 		aucs = c(aucs, auc(results))
 	}
 	return(aucs)
