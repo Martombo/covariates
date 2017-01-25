@@ -41,7 +41,7 @@ ruv_corr_g = function(counts, group, n_sv=0){
 	control_genes = row.names(res)[gene_limit:dim(res)[1]]
 	counts = as.matrix(counts)
 	row.names(counts) = seq(dim(counts)[1])
-	set = RUVg(counts, control_genes, k=1)
+	set = RUVg(counts, control_genes, k=n_sv)
 	return(set[[1]])
 }
 
@@ -52,43 +52,47 @@ sva_corr = function(counts, group, n_sv=0){
 	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), ~group)
 	dds = estimateSizeFactors(dds)
 	dat = counts(dds, normalized=T)
-	dat = dat[rowMeans(dat)>0,]
+	dat = dat[rowMeans(dat)>5,]
 	mod = model.matrix(~group, colData(dds))
 	mod0 = model.matrix(~1, colData(dds))
-	svseq = svaseq(dat, mod, mod0, n.sv=n_sv)
+	svseq = svaseq(as.matrix(dat), mod, mod0, n.sv=n_sv)
 	return(svseq)
 }
 
-# sva correction function (based on DESeq2 rld)
-sva_corr_rld = function(counts, group, n_sv=0){
+
+# function to determine design. estimates number of covariates, if not already given
+determine_design = function(counts, group, sva_method, n_sv){
 	require(sva)
-	require(DESeq2)
-	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), ~group)
-	dds = estimateSizeFactors(dds)
-	rld = rlogTransformation(dds)
-	dat = rld@assays[[1]]
-	dat[dat<0] = 0
-	mod = model.matrix(~group, colData(dds))
-	mod0 = model.matrix(~1, colData(dds))
-	svseq = svaseq(dat, mod, mod0, n.sv=n_sv)
-	return(svseq)
+	design = model.matrix(~group)
+	if (is.null(n_sv)){
+		n_sv = num.sv(as.matrix(counts), model.matrix(~group), sva_method)
+	}
+	if (n_sv > 0){
+		if (!is.null(sva)){
+			corr = sva_corr(counts, group, n_sv)$sv
+		}else{
+			if (ruv == "g"){
+				corr = ruv_corr_g(counts, group, n_sv)
+			}
+		}
+		corr = as.double(corr)
+		if (is.null(dim(corr)[1])){
+			design = model.matrix(~corr+group)
+		}
+		if (dim(corr)[1] == 2){
+			design = model.matrix(~corr[,1]+corr[,2]+group)
+		}else{
+			design = model.matrix(~corr[,1]+corr[,2]+corr[,3]+group)
+		}
+	}
+	return(design)
 }
 
 ### function to run the differential expression analysis on one dataset
 	# includes the computation of true and false positive rates
-perform_dea = function(n_sim, group, corr=0, n_sv=NA, ruv=NA){
+perform_dea = function(n_sim, group, corr=0, sva=NULL, ruv=NULL, n_sv=NULL, sva_method="be"){
 	counts = read.table(paste0("counts", n_sim))
-	design = model.matrix(~group)
-	if (!is.na(n_sv)){
-		svs = sva_corr_rld(counts, group, n_sv)
-		corr = svs$sv
-	}
-	if (!is.na(ruv) && ruv == "g"){
-		corr = ruv_corr_g(counts, group, n_sv)
-	}
-	if (length(corr) > 1){
-		design = model.matrix(~as.double(corr)+group)
-	}
+	design = determine_design(counts, group, sva_method, n_sv)
 	results = voom_res(counts, group, design)
 	log2FCs = read.table(paste0("log2FCs", n_sim))
 	names(log2FCs)[1] = "true_log2FC"
@@ -100,8 +104,8 @@ perform_dea = function(n_sim, group, corr=0, n_sv=NA, ruv=NA){
 }
 
 ### AUC computation on list of simulated datasets ###
-compute_accuracy = function(n_simulations, n_replicates, corr=0, n_sv=NA, ruv=NA){
-	if (!is.na(n_sv) && !is.na(ruv)){
+compute_accuracy = function(n_simulations, n_replicates, corr=0, sva=NULL, ruv=NULL){
+	if (!is.null(sva) && !is.null(ruv)){
 		stop("choose either sva or ruv correction")	
 	}
 	if (length(n_replicates) == 1) {
@@ -110,7 +114,7 @@ compute_accuracy = function(n_simulations, n_replicates, corr=0, n_sv=NA, ruv=NA
 	group = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
 	aucs = c()
 	for (n_sim in seq(n_simulations)){
-		results = perform_dea(n_sim, group, corr, n_sv, ruv)
+		results = perform_dea(n_sim, group, corr, sva, ruv)
 		aucs = c(aucs, auc(results))
 	}
 	return(aucs)

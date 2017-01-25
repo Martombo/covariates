@@ -1,5 +1,4 @@
 library(ggplot2)
-source("../modified_compcode.R")
 source("../generate_counts.R")
 source("../compute_accuracy.R")
 
