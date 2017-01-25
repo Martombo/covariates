@@ -30,12 +30,10 @@ auc = function(res, fpr_limit=0.1){
 }
 
 # RUVseq GLM residuals
-ruv_corr_r = function(counts, group, n_sv=0){
+ruv_corr_r = function(counts, group, n_sv=1){
 	require(RUVSeq)
 	require(edgeR)
 	design0 = model.matrix(~group)
-	counts = as.matrix(counts)
-	row.names(counts) = seq(dim(counts)[1])
 	y = DGEList(counts=counts, group=group)
 	y = calcNormFactors(y, method="upperquartile")
 	y = estimateGLMCommonDisp(y, design0)
@@ -47,17 +45,15 @@ ruv_corr_r = function(counts, group, n_sv=0){
 }
 
 # RUVseq replicate samples
-ruv_corr_s = function(counts, group, n_sv=0){
+ruv_corr_s = function(counts, group, n_sv=1){
 	require(RUVSeq)
 	differences = makeGroups(group)
-	counts = as.matrix(counts)
-	row.names(counts) = seq(dim(counts)[1])
 	set = RUVs(counts, row.names(counts), k=n_sv, differences)
 	return(set[[1]])
 }
 
 # RUVseq empirical control genes
-ruv_corr_g = function(counts, group, n_sv=0){
+ruv_corr_g = function(counts, group, n_sv=1){
 	require(RUVSeq)
 	require(DESeq2)
 	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), ~group)
@@ -66,8 +62,6 @@ ruv_corr_g = function(counts, group, n_sv=0){
 	res = res[order(res$padj),]
 	gene_limit = round(dim(res)[1] * 0.2)
 	control_genes = row.names(res)[gene_limit:dim(res)[1]]
-	counts = as.matrix(counts)
-	row.names(counts) = seq(dim(counts)[1])
 	set = RUVg(counts, control_genes, k=n_sv)
 	return(set[[1]])
 }
@@ -79,7 +73,7 @@ sva_corr = function(counts, group, n_sv=0){
 	dds = DESeqDataSetFromMatrix(countData=counts, colData=data.frame(group=group), ~group)
 	dds = estimateSizeFactors(dds)
 	dat = counts(dds, normalized=T)
-	dat = dat[rowMeans(dat)>5,]
+	dat = dat[rowMeans(dat)>0,]
 	mod = model.matrix(~group, colData(dds))
 	mod0 = model.matrix(~1, colData(dds))
 	svseq = svaseq(as.matrix(dat), mod, mod0, n.sv=n_sv)
@@ -111,14 +105,9 @@ determine_design = function(counts, group, sva, ruv, sva_method, n_sv, corr){
 	}else if (ruv == "r"){
 		corr = ruv_corr_r(counts, group, n_sv)
 	}
-	corr = as.double(corr)
-	if (is.null(dim(corr)[1])){
-		design = model.matrix(~corr+group)
-	}else if (dim(corr)[1] == 2){
-		design = model.matrix(~corr[,1]+corr[,2]+group)
-	}else{
-		  design = model.matrix(~corr[,1]+corr[,2]+corr[,3]+group)
-	}
+	print(n_sv)
+	#corr = as.double(corr)
+	design = model.matrix(~corr+group)
 	return(design)
 }
 
@@ -136,20 +125,40 @@ perform_dea = function(counts, n_sim, group, design){
 }
 
 ### AUC computation on list of simulated datasets ###
-compute_accuracy = function(n_simulations, n_replicates, sva=NULL, ruv=NULL, n_sv=NULL, sva_method="be", corr=NULL){
+compute_accuracy = function(n_simulations, n_replicates=0, sva=NULL, ruv=NULL, n_sv=NULL, sva_method="be", corr=NULL){
 	if (!is.null(sva) && !is.null(ruv)){
 		stop("choose either sva or ruv correction")	
 	}
 	if (length(n_replicates) == 1) {
 		n_replicates = rep(n_replicates, 2)
 	}
-	group = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
 	aucs = c()
 	for (n_sim in seq(n_simulations)){
-	  counts = read.table(paste0("counts", n_sim))
+		counts = read.table(paste0("counts", n_sim))
+		counts = as.matrix(counts)
+		if (n_replicates[1] == 0){
+			n_replicates = rep(dim(counts)[2]/2,2)
+		}
+		group = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
+		row.names(counts) = seq(dim(counts)[1])
 		design = determine_design(counts, group, sva, ruv, sva_method, n_sv, corr)
 		results = perform_dea(counts, n_sim, group, design)
 		aucs = c(aucs, auc(results))
 	}
 	return(aucs)
+}
+
+### AUC computation of all methods on list of simulated datasets ###
+compute_all_accuracy = function(n_simulations, n_covar){
+	require(sva)
+	auc_nocorr = compute_accuracy(n_simulations)
+	auc_sva = compute_accuracy(n_simulations, sva=T)
+	auc_ruvg = compute_accuracy(n_simulations, ruv="g")
+	auc_ruvs = compute_accuracy(n_simulations, ruv="s")
+	auc_ruvr = compute_accuracy(n_simulations, ruv="r")
+	auc_sva1 = compute_accuracy(n_simulations, sva=T, n_sv=1)
+	results_auc = data.frame(auc=c(auc_nocorr, auc_sva, auc_ruvg, auc_ruvs, auc_ruvr, auc_sva1)/auc_nocorr)
+	results_auc$n_covar = n_covar
+	results_auc$corr = rep(c("no_corr", "sva", "ruv_g", "ruv_s", "ruv_r", "sva1"), each=length(auc_nocorr))
+	return(results_auc)
 }

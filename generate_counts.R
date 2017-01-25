@@ -1,10 +1,14 @@
-simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_degs=2000, deg_min_fc=1.3,  n_covariates=1, 
-			cov_strength_min=0, cov_strength_max=0, cov_strengths=NA, cov_width=1, cov_decreasing_factor=1,
+simulate_dataset = function(n_replicates=NA, n_simulations=1, n_genes=10000, n_degs=2000, deg_min_fc=1.3,  n_covariates=0, 
+			cov_strength_min=0, cov_strength_max=2, cov_strengths=NA, cov_width=1, cov_decreasing_factor=1,
 			min_counts=0, data_file=NA, data_reps=NA, depth=3e+07, relmeans="auto", dispersions="auto"){
 
 	require(methods)
 	require(DESeq2)
 	source("../modified_compcode.R")
+
+	if (is.na(n_replicates)){
+		n_replicates = sample(3:12, 1)
+	}
 
 # apply covariate function
 	apply_covariate = function(counts, cov_strength, cov_genes, n_samples, min_counts){
@@ -77,5 +81,4 @@ simulate_dataset = function(n_replicates=3, n_simulations=1, n_genes=10000, n_de
 		write.table(counts, paste0("counts", n_sim), row.names=F, col.names=F, quote=F)
 		write.table(true_log2FCs, paste0("log2FCs", n_sim), row.names=F, col.names=F, quote=F)
 	}
-	return(strength_list)
 }
