@@ -29,6 +29,33 @@ auc = function(res, fpr_limit=0.1){
 	return(auc)
 }
 
+# RUVseq GLM residuals
+ruv_corr_r = function(counts, group, n_sv=0){
+	require(RUVSeq)
+	require(edgeR)
+	design0 = model.matrix(~group)
+	counts = as.matrix(counts)
+	row.names(counts) = seq(dim(counts)[1])
+	y = DGEList(counts=counts, group=group)
+	y = calcNormFactors(y, method="upperquartile")
+	y = estimateGLMCommonDisp(y, design0)
+	y = estimateGLMTagwiseDisp(y, design0)
+	fit = glmFit(y, design0)
+	residuals = residuals(fit, type="deviance")
+	set = RUVr(counts, row.names(counts), k=n_sv, residuals)
+	return(set[[1]])
+}
+
+# RUVseq replicate samples
+ruv_corr_s = function(counts, group, n_sv=0){
+	require(RUVSeq)
+	differences = makeGroups(group)
+	counts = as.matrix(counts)
+	row.names(counts) = seq(dim(counts)[1])
+	set = RUVs(counts, row.names(counts), k=n_sv, differences)
+	return(set[[1]])
+}
+
 # RUVseq empirical control genes
 ruv_corr_g = function(counts, group, n_sv=0){
 	require(RUVSeq)
@@ -61,38 +88,43 @@ sva_corr = function(counts, group, n_sv=0){
 
 
 # function to determine design. estimates number of covariates, if not already given
-determine_design = function(counts, group, sva_method, n_sv){
-	require(sva)
-	design = model.matrix(~group)
+determine_design = function(counts, group, sva, ruv, sva_method, n_sv, corr){
+	if (is.null(corr) && is.null(sva) && is.null(ruv)){
+		return(model.matrix(~group))
+	}
+	if (!is.null(corr)){
+		return(model.matrix(~corr+group))
+	}
 	if (is.null(n_sv)){
+		require(sva)
 		n_sv = num.sv(as.matrix(counts), model.matrix(~group), sva_method)
 	}
-	if (n_sv > 0){
-		if (!is.null(sva)){
-			corr = sva_corr(counts, group, n_sv)$sv
-		}else{
-			if (ruv == "g"){
-				corr = ruv_corr_g(counts, group, n_sv)
-			}
-		}
-		corr = as.double(corr)
-		if (is.null(dim(corr)[1])){
-			design = model.matrix(~corr+group)
-		}
-		if (dim(corr)[1] == 2){
-			design = model.matrix(~corr[,1]+corr[,2]+group)
-		}else{
-			design = model.matrix(~corr[,1]+corr[,2]+corr[,3]+group)
-		}
+	if (n_sv == 0){
+		return(model.matrix(~group))
+	}
+	if (!is.null(sva)){
+		corr = sva_corr(counts, group, n_sv)$sv
+	}else if (ruv == "g"){
+		corr = ruv_corr_g(counts, group, n_sv)
+	}else if (ruv == "s"){
+		corr = ruv_corr_s(counts, group, n_sv)
+	}else if (ruv == "r"){
+		corr = ruv_corr_r(counts, group, n_sv)
+	}
+	corr = as.double(corr)
+	if (is.null(dim(corr)[1])){
+		design = model.matrix(~corr+group)
+	}else if (dim(corr)[1] == 2){
+		design = model.matrix(~corr[,1]+corr[,2]+group)
+	}else{
+		  design = model.matrix(~corr[,1]+corr[,2]+corr[,3]+group)
 	}
 	return(design)
 }
 
 ### function to run the differential expression analysis on one dataset
 	# includes the computation of true and false positive rates
-perform_dea = function(n_sim, group, corr=0, sva=NULL, ruv=NULL, n_sv=NULL, sva_method="be"){
-	counts = read.table(paste0("counts", n_sim))
-	design = determine_design(counts, group, sva_method, n_sv)
+perform_dea = function(counts, n_sim, group, design){
 	results = voom_res(counts, group, design)
 	log2FCs = read.table(paste0("log2FCs", n_sim))
 	names(log2FCs)[1] = "true_log2FC"
@@ -104,7 +136,7 @@ perform_dea = function(n_sim, group, corr=0, sva=NULL, ruv=NULL, n_sv=NULL, sva_
 }
 
 ### AUC computation on list of simulated datasets ###
-compute_accuracy = function(n_simulations, n_replicates, corr=0, sva=NULL, ruv=NULL){
+compute_accuracy = function(n_simulations, n_replicates, sva=NULL, ruv=NULL, n_sv=NULL, sva_method="be", corr=NULL){
 	if (!is.null(sva) && !is.null(ruv)){
 		stop("choose either sva or ruv correction")	
 	}
@@ -114,7 +146,9 @@ compute_accuracy = function(n_simulations, n_replicates, corr=0, sva=NULL, ruv=N
 	group = c(rep("A", n_replicates[1]), rep("B", n_replicates[2]))
 	aucs = c()
 	for (n_sim in seq(n_simulations)){
-		results = perform_dea(n_sim, group, corr, sva, ruv)
+	  counts = read.table(paste0("counts", n_sim))
+		design = determine_design(counts, group, sva, ruv, sva_method, n_sv, corr)
+		results = perform_dea(counts, n_sim, group, design)
 		aucs = c(aucs, auc(results))
 	}
 	return(aucs)
