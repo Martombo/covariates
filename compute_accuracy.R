@@ -76,8 +76,13 @@ sva_corr = function(counts, group, n_sv=0){
 	dat = dat[rowMeans(dat)>0,]
 	mod = model.matrix(~group, colData(dds))
 	mod0 = model.matrix(~1, colData(dds))
-	svseq = svaseq(as.matrix(dat), mod, mod0, n.sv=n_sv)
-	return(svseq)
+	dat = pmin(dat, 500000)
+	svseq = tryCatch({
+		return(svaseq(as.matrix(dat), mod, mod0, n.sv=n_sv)$sv)
+	}, error = function(e) {
+		return(1)
+	})
+	return(svseq$sv)
 }
 
 
@@ -97,7 +102,7 @@ determine_design = function(counts, group, sva, ruv, sva_method, n_sv, corr){
 		return(model.matrix(~group))
 	}
 	if (!is.null(sva)){
-		corr = sva_corr(counts, group, n_sv)$sv
+		corr = sva_corr(counts, group, n_sv)
 	}else if (ruv == "g"){
 		corr = ruv_corr_g(counts, group, n_sv)
 	}else if (ruv == "s"){
@@ -105,9 +110,11 @@ determine_design = function(counts, group, sva, ruv, sva_method, n_sv, corr){
 	}else if (ruv == "r"){
 		corr = ruv_corr_r(counts, group, n_sv)
 	}
-	print(n_sv)
-	#corr = as.double(corr)
-	design = model.matrix(~corr+group)
+	if (length(corr) < length(group)){
+		design = model.matrix(group)
+	}else{
+		design = model.matrix(~corr+group)
+	}
 	return(design)
 }
 

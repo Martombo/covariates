@@ -9,6 +9,12 @@ simulate_dataset = function(n_replicates=NA, n_simulations=1, n_genes=10000, n_d
 	if (is.na(n_replicates)){
 		n_replicates = sample(3:12, 1)
 	}
+	if (is.na(depth)){
+		depth = runif(1,1e+07,5e+07)
+	}
+	if (is.na(n_degs)){
+		n_degs = runif(1, 1000, 3000)
+	}
 
 # apply covariate function
 	apply_covariate = function(counts, cov_strength, cov_genes, n_samples, min_counts){
